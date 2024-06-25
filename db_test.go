@@ -119,7 +119,7 @@ func TestDb_Segments_Merge(t *testing.T) {
 	})
 
 	t.Run("check new segment creation and merge", func(t *testing.T) {
-		db.Put("3", "not third")
+		db.Put("3", "not third yet.........")
 		actual := len(db.segments)
 		expected := 3
 		if actual != expected {
@@ -140,7 +140,7 @@ func TestDb_Segments_Merge(t *testing.T) {
 		if err != nil {
 			t.Error(err)
 		}
-		expected := "not third"
+		expected := "not third yet........."
 		if actual != expected {
 			t.Errorf("An error occurred during segmentation. Expected value: %s, Actual value: %s", expected, actual)
 		}
@@ -155,7 +155,7 @@ func TestDb_Segments_Merge(t *testing.T) {
 
 		inf, _ := file.Stat()
 		actual := inf.Size()
-		expected := int64(64)
+		expected := int64(92)
 		if actual != expected {
 			t.Errorf("An error occurred during segmentation. Expected size %d, Actual one: %d", expected, actual)
 		}
