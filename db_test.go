@@ -5,28 +5,29 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestDb_Put(t *testing.T) {
-	dir, err := ioutil.TempDir("", "test-db")
+	dir, err := ioutil.TempDir("", "testing-db")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(dir)
 
-	db, err := NewDb(dir)
+	db, err := NewDb(dir, 1000)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer db.Close()
 
-	pairs := [][]string {
-		{"key1", "value1"},
-		{"key2", "value2"},
-		{"key3", "value3"},
+	pairs := [][]string{
+		{"1", "v"},
+		{"2", "vv"},
+		{"3", "vvv"},
 	}
 
-	outFile, err := os.Open(filepath.Join(dir, outFileName))
+	outFile, err := os.Open(filepath.Join(dir, outFileName+"0"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,7 +43,7 @@ func TestDb_Put(t *testing.T) {
 				t.Errorf("Cannot get %s: %s", pairs[0], err)
 			}
 			if value != pair[1] {
-				t.Errorf("Bad value returned expected %s, got %s", pair[1], value)
+				t.Errorf("Incorrect value returned expected %s, got %s", pair[1], value)
 			}
 		}
 	})
@@ -51,7 +52,7 @@ func TestDb_Put(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	size1 := outInfo.Size()
+	size := outInfo.Size()
 
 	t.Run("file growth", func(t *testing.T) {
 		for _, pair := range pairs {
@@ -64,8 +65,8 @@ func TestDb_Put(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if size1 * 2 != outInfo.Size() {
-			t.Errorf("Unexpected size (%d vs %d)", size1, outInfo.Size())
+		if size*2 != outInfo.Size() {
+			t.Errorf("Unexpected size: %d instead of %d)", size, outInfo.Size())
 		}
 	})
 
@@ -73,7 +74,7 @@ func TestDb_Put(t *testing.T) {
 		if err := db.Close(); err != nil {
 			t.Fatal(err)
 		}
-		db, err = NewDb(dir)
+		db, err = NewDb(dir, 1000)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -89,4 +90,74 @@ func TestDb_Put(t *testing.T) {
 		}
 	})
 
+}
+
+func TestDb_Segments_Merge(t *testing.T) {
+	saveDirectory, err := ioutil.TempDir("", "testDir")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(saveDirectory)
+
+	db, err := NewDb(saveDirectory, 64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	t.Run("check creation of new segment", func(t *testing.T) {
+		db.Put("1", "first")
+		db.Put("2", "second")
+		db.Put("3", "third")
+		db.Put("4", "fourth")
+		db.Put("5", "fifth")
+		actual := len(db.segments)
+		expected := 2
+		if actual != expected {
+			t.Errorf("Expected %d files, but received %d.", expected, actual)
+		}
+	})
+
+	t.Run("check new segment creation and merge", func(t *testing.T) {
+		db.Put("3", "not third")
+		actual := len(db.segments)
+		expected := 3
+		if actual != expected {
+			t.Errorf("Expected %d files before merge, but received %d.", expected, actual)
+		}
+
+		time.Sleep(2 * time.Second)
+
+		actualAfterMerge := len(db.segments)
+		expectedAfterMerge := 2
+		if actual != expected {
+			t.Errorf("Expected %d files after merge, but received %d.", expectedAfterMerge, actualAfterMerge)
+		}
+	})
+
+	t.Run("check not storing new values of duplicate keys", func(t *testing.T) {
+		actual, err := db.Get("3")
+		if err != nil {
+			t.Error(err)
+		}
+		expected := "not third"
+		if actual != expected {
+			t.Errorf("An error occurred during segmentation. Expected value: %s, Actual value: %s", expected, actual)
+		}
+	})
+
+	t.Run("check size", func(t *testing.T) {
+		file, err := os.Open(db.segments[0].filePath)
+		defer file.Close()
+		if err != nil {
+			t.Error(err)
+		}
+
+		inf, _ := file.Stat()
+		actual := inf.Size()
+		expected := int64(64)
+		if actual != expected {
+			t.Errorf("An error occurred during segmentation. Expected size %d, Actual one: %d", expected, actual)
+		}
+	})
 }
